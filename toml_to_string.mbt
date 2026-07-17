@@ -1,0 +1,330 @@
+///|
+/// Helper function to escape strings according to TOML spec
+fn escape_toml_string(s : String) -> String {
+  let result = StringBuilder()
+  for char in s {
+    match char {
+      '\b' => result <+ "\\b"
+      '\t' => result <+ "\\t"
+      '\n' => result <+ "\\n"
+      '\f' => result <+ "\\f"
+      '\r' => result <+ "\\r"
+      '"' => result <+ "\\\""
+      '\\' => result <+ "\\\\"
+      // Control characters (U+0000 to U+001F) except the above
+      c if c >= '\u0000' && c <= '\u001F' => {
+        result <+ "\\u"
+        let code = c.to_int()
+        // Format as 4-digit hex manually
+        let hex = StringBuilder()
+        for i = 3; i >= 0; i = i - 1 {
+          let digit = (code >> (i * 4)) & 0xF
+          if digit < 10 {
+            hex.write_char(Int::unsafe_to_char('0'.to_int() + digit))
+          } else {
+            hex.write_char(Int::unsafe_to_char('A'.to_int() + digit - 10))
+          }
+        }
+        result <+ "\{hex}"
+      }
+      // DEL character (U+007F)
+      '\u007F' => result <+ "\\u007F"
+      c => result.write_char(c)
+    }
+  }
+  result.to_string()
+}
+
+///|
+/// Bare TOML keys are limited to ASCII letters, digits, '_' and '-'.
+fn is_bare_toml_key_char(char : Char) -> Bool {
+  match char {
+    'a'..='z' | 'A'..='Z' | '0'..='9' | '_' | '-' => true
+    _ => false
+  }
+}
+
+///|
+fn is_bare_toml_key(s : String) -> Bool {
+  if s.is_empty() {
+    false
+  } else {
+    for char in s {
+      if !is_bare_toml_key_char(char) {
+        return false
+      }
+    }
+    true
+  }
+}
+
+///|
+/// Quote any key that is not a valid TOML bare key.
+fn needs_quoting(s : String) -> Bool {
+  !is_bare_toml_key(s)
+}
+
+///|
+test "needs_quoting tests" {
+  debug_inspect(needs_quoting("simplekey"), content="false")
+  debug_inspect(needs_quoting("normal-key"), content="false")
+  debug_inspect(needs_quoting("123"), content="false")
+  debug_inspect(needs_quoting("key with spaces"), content="true")
+  debug_inspect(needs_quoting("key.with.dots"), content="true")
+  debug_inspect(needs_quoting("key\nwith\nnewlines"), content="true")
+  debug_inspect(needs_quoting(" key"), content="true")
+  debug_inspect(needs_quoting("key "), content="true")
+  debug_inspect(needs_quoting(""), content="true")
+  debug_inspect(needs_quoting("key=with=equals"), content="true")
+  debug_inspect(needs_quoting("café"), content="true")
+  debug_inspect(needs_quoting("[1]"), content="true")
+}
+
+///|
+/// Format a key for TOML output
+fn format_toml_key(key : String) -> String {
+  if needs_quoting(key) {
+    "\"\{escape_toml_string(key)}\""
+  } else {
+    key
+  }
+}
+
+///|
+/// Helper to check if an array should be formatted inline
+fn should_format_inline(arr : Array[TomlValue]) -> Bool {
+  // Empty arrays or arrays with more than 5 elements should be multiline
+  if arr.is_empty() || arr.length() > 5 {
+    return arr.is_empty()
+  }
+
+  // Arrays containing tables should be multiline
+  for value in arr {
+    match value {
+      TomlTable(_) => return false
+      TomlArray(inner) if !should_format_inline(inner) => return false
+      _ => continue
+    }
+  }
+  true
+}
+
+///|
+/// Convert a TomlValue to its string representation in TOML format
+pub fn TomlValue::to_string(self : TomlValue) -> String {
+  let result = StringBuilder()
+  self.write_toml(result, [])
+  result.to_string()
+}
+
+///|
+/// TODO: the logger interface is good?
+pub impl Show for TomlValue with fn output(self, logger) {
+  logger.write_string(self.to_string())
+}
+
+///|
+/// Internal helper to write TOML with proper formatting
+fn TomlValue::write_toml(
+  self : TomlValue,
+  output : StringBuilder,
+  path : Array[String], // Current table path for nested tables
+) -> Unit {
+  match self {
+    TomlString(s) => output <+ "\"\{escape_toml_string(s)}\""
+    TomlInteger(i) => output <+ "\{i}"
+    TomlFloat(f) =>
+      // Handle special float values
+      if f.is_nan() {
+        output <+ "nan"
+      } else if f.is_inf() {
+        if f < 0.0 {
+          output <+ "-inf"
+        } else {
+          output <+ "inf"
+        }
+      } else {
+        // Ensure floats always have decimal point
+        let s = f.to_string()
+        if !s.contains(".") && !s.contains("e") && !s.contains("E") {
+          output <+ "\{s}.0"
+        } else {
+          output <+ "\{s}"
+        }
+      }
+    TomlBoolean(b) => if b { output <+ "true" } else { output <+ "false" }
+    TomlDateTime(dt) =>
+      match dt {
+        OffsetDateTime(s) | LocalDateTime(s) | LocalDate(s) | LocalTime(s) =>
+          output <+ "\{s}"
+      }
+    TomlArray(arr) =>
+      if should_format_inline(arr) {
+        // Inline array
+        output <+ "["
+        for i = 0; i < arr.length(); i = i + 1 {
+          if i > 0 {
+            output <+ ", "
+          }
+          arr[i].write_toml(output, path)
+        }
+        output <+ "]"
+      } else {
+        // Multiline array
+        output <+ "[\n"
+        for i = 0; i < arr.length(); i = i + 1 {
+          output <+ "  "
+          arr[i].write_toml(output, path)
+          if i < arr.length() - 1 {
+            output <+ ","
+          }
+          output <+ "\n"
+        }
+        output <+ "]"
+      }
+    TomlTable(table) =>
+      if path.is_empty() {
+        // Root table - format as top-level TOML document
+        write_table_contents(table, output, path)
+      } else {
+        // Inline table for nested tables
+        write_inline_table(table, output)
+      }
+  }
+}
+
+///|
+/// Write table contents as key-value pairs
+fn write_table_contents(
+  table : Map[String, TomlValue],
+  output : StringBuilder,
+  path : Array[String],
+) -> Unit {
+  let simple_pairs : Array[(String, TomlValue)] = []
+  let array_pairs : Array[(String, TomlValue)] = []
+  let table_pairs : Array[(String, TomlValue)] = []
+
+  // Categorize entries
+  table.each(fn(key, value) {
+    match value {
+      TomlTable(_) => table_pairs.push((key, value))
+      TomlArray(arr) => {
+        // Check if it's an array of tables
+        let mut is_table_array = true
+        for item in arr {
+          match item {
+            TomlTable(_) => continue
+            _ => {
+              is_table_array = false
+              break
+            }
+          }
+        }
+        if is_table_array && arr.length() > 0 {
+          table_pairs.push((key, value))
+        } else {
+          array_pairs.push((key, value))
+        }
+      }
+      _ => simple_pairs.push((key, value))
+    }
+  })
+
+  // Write simple key-value pairs first
+  for i = 0; i < simple_pairs.length(); i = i + 1 {
+    let (key, value) = simple_pairs[i]
+    output <+ "\{format_toml_key(key)} = "
+    value.write_toml(output, path)
+    output <+ "\n"
+  }
+
+  // Write arrays
+  for i = 0; i < array_pairs.length(); i = i + 1 {
+    let (key, value) = array_pairs[i]
+    if i > 0 || simple_pairs.length() > 0 {
+      output <+ "\n"
+    }
+    output <+ "\{format_toml_key(key)} = "
+    value.write_toml(output, path)
+    output <+ "\n"
+  }
+
+  // Write nested tables
+  for i = 0; i < table_pairs.length(); i = i + 1 {
+    let (key, value) = table_pairs[i]
+    if i > 0 || simple_pairs.length() > 0 || array_pairs.length() > 0 {
+      output <+ "\n"
+    }
+    match value {
+      TomlArray(arr) =>
+        // Array of tables
+        for j = 0; j < arr.length(); j = j + 1 {
+          if j > 0 {
+            output <+ "\n"
+          }
+          output <+ "[["
+          write_table_path(path, output)
+          if path.length() > 0 {
+            output <+ "."
+          }
+          output <+ "\{format_toml_key(key)}]]\n"
+          match arr[j] {
+            TomlTable(t) => {
+              let new_path = path.copy()
+              new_path.push(key)
+              write_table_contents(t, output, new_path)
+            }
+            _ => () // Should not happen if properly validated
+          }
+        }
+      TomlTable(t) => {
+        // Regular nested table
+        output <+ "["
+        write_table_path(path, output)
+        if path.length() > 0 {
+          output <+ "."
+        }
+        output <+ "\{format_toml_key(key)}]\n"
+        let new_path = path.copy()
+        new_path.push(key)
+        write_table_contents(t, output, new_path)
+      }
+      _ => () // Should not happen
+    }
+  }
+}
+
+///|
+/// Write an inline table
+fn write_inline_table(
+  table : Map[String, TomlValue],
+  output : StringBuilder,
+) -> Unit {
+  output <+ "{ "
+  let mut first = true
+  table.each(fn(key, value) {
+    if !first {
+      output <+ ", "
+    }
+    first = false
+    output <+ "\{format_toml_key(key)} = "
+
+    // For inline tables, nested tables should also be inline
+    match value {
+      TomlTable(t) => write_inline_table(t, output)
+      _ => value.write_toml(output, [])
+    }
+  })
+  output <+ " }"
+}
+
+///|
+/// Write the table path for section headers
+fn write_table_path(path : Array[String], output : StringBuilder) -> Unit {
+  for i = 0; i < path.length(); i = i + 1 {
+    if i > 0 {
+      output <+ "."
+    }
+    output <+ "\{format_toml_key(path[i])}"
+  }
+}
