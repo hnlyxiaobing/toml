@@ -1,7 +1,7 @@
 ///|
 /// Default location for testing and compatibility
 pub fn default_loc() -> Loc {
-  let pos : @lexer.Position = { line: 1, column: 1 }
+  let pos = @lexer.Position::{ line: 1, column: 1 }
   { start: pos, end: pos }
 }
 
@@ -650,10 +650,7 @@ fn @lexer.Lexer::read_binary_number(self : @lexer.Lexer) -> Int64 raise {
 /// Check if the current input matches a datetime pattern without consuming characters
 fn @lexer.Lexer::is_datetime_pattern(self : @lexer.Lexer) -> Bool {
   // Check for datetime patterns using regex
-  if self.view() =~ (
-    re"^[0-9]{2}:[0-9]{2}(:[0-9]{2})?(\.[0-9]+)?",
-    after=rest,
-  ) {
+  if self.view() =~ (re"^[0-9]{2}:[0-9]{2}(:[0-9]{2})?(\.[0-9]+)?", after=rest) {
     return check_datetime_terminator_string(rest)
   }
   if self.view() =~ (re"^[0-9]{4}-[0-9]{2}-[0-9]{2}", after=_) {
@@ -684,18 +681,15 @@ fn @lexer.Lexer::read_datetime_with_loc(
   //   - Check what follows T to determine: LocalDate, LocalDateTime, or OffsetDateTime
   // LocalTime: HH:MM[:SS[.fff]] - must check first (2-digit start vs 4-digit)
   if self.view() =~ (
-    (re"^[0-9]{2}:[0-9]{2}(:[0-9]{2})?(\.[0-9]+)?") as time,
-    after=rest,
-  ) {
+      re"^[0-9]{2}:[0-9]{2}(:[0-9]{2})?(\.[0-9]+)?" as time,
+      after=rest,
+    ) {
     self.update_view(rest)
     let time_str = time.to_owned()
     validate_time(time_str)
     let end_pos = self.get_loc()
     DateTimeToken(LocalTime(time_str), loc=make_loc(start_pos, end_pos))
-  } else if self.view() =~ (
-    (re"^[0-9]{4}-[0-9]{2}-[0-9]{2}") as date,
-    after=rest,
-  ) {
+  } else if self.view() =~ (re"^[0-9]{4}-[0-9]{2}-[0-9]{2}" as date, after=rest) {
     self.update_view(rest)
     let date_str = date.to_owned()
     validate_date(date_str)

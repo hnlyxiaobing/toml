@@ -107,7 +107,7 @@ test "test edge case number formats for error paths" {
   debug_inspect(
     tokens,
     content=(
-      #|Err(Failure("internal/tokenize/tokenize.mbt:969:12-969:41@hnlyxiaobing/toml FAILED: Invalid integer: 999999999999999999999999999999999999999"))
+      #|Err(Failure("internal/tokenize/tokenize.mbt:963:12-963:41@hnlyxiaobing/toml FAILED: Invalid integer: 999999999999999999999999999999999999999"))
     ),
   )
 }

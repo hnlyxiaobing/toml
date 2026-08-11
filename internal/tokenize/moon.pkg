@@ -1,5 +1,6 @@
 import {
   "bobzhang/lexer",
   "hnlyxiaobing/toml/datetime",
+  "moonbitlang/core/debug",
   "moonbitlang/core/string",
 }

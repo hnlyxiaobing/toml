@@ -11,6 +11,11 @@ pub(all) enum TomlValue {
 } derive(Eq, Debug)
 
 ///|
+/// Extend TomlValue with Eq and Debug methods
+pub extend TomlValue with Eq::{not_equal, equal}
+pub extend TomlValue with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
 /// Re-export `TomlDateTime` so consumers see the type as `@toml.TomlDateTime`
 /// instead of having to import the `datetime` subpackage directly.
 pub using @datetime {type TomlDateTime}

@@ -343,7 +343,8 @@ test "datetime token creation" {
   let local_time_token = @tokenize.DateTimeToken(LocalTime("07:32:00"), loc~)
 
   // Test that tokens can be created (basic instantiation test)
-  guard! offset_dt_token is DateTimeToken(OffsetDateTime("1979-05-27T07:32:00Z"))
+  guard! offset_dt_token
+    is DateTimeToken(OffsetDateTime("1979-05-27T07:32:00Z"))
   guard! local_dt_token is DateTimeToken(LocalDateTime("1979-05-27T07:32:00"))
   guard! local_date_token is DateTimeToken(LocalDate("1979-05-27"))
   guard! local_time_token is DateTimeToken(LocalTime("07:32:00"))

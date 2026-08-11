@@ -12,6 +12,11 @@ pub(all) struct Loc {
 } derive(Eq, Debug)
 
 ///|
+/// Extend Loc with Eq and Debug methods
+pub extend Loc with Eq::{not_equal, equal}
+pub extend Loc with @moonbitlang/core/debug.Debug::{to_repr}
+
+///|
 /// Token types for the lexer
 pub(all) enum Token {
   // Literals
@@ -37,6 +42,11 @@ pub(all) enum Token {
   Newline(loc~ : Loc)
   EOF(loc~ : Loc)
 } derive(Eq, Debug)
+
+///|
+/// Extend Token with Eq and Debug methods
+pub extend Token with Eq::{not_equal, equal}
+pub extend Token with @moonbitlang/core/debug.Debug::{to_repr}
 
 ///|
 /// Check if two locations are adjacent (end of first equals start of second).

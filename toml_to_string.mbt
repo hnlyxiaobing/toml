@@ -124,6 +124,10 @@ pub impl Show for TomlValue with fn output(self, logger) {
 }
 
 ///|
+/// Extend TomlValue with Show methods
+pub extend TomlValue with Show::{output}
+
+///|
 /// Internal helper to write TOML with proper formatting
 fn TomlValue::write_toml(
   self : TomlValue,
