@@ -137,7 +137,7 @@ fn Parser::parse_array(self : Self) -> TomlValue raise {
 /// Parse an inline table {key = value, key2 = value2}
 /// No trailing comma allowed unlike Array
 fn Parser::parse_inline_table(self : Parser) -> TomlValue raise {
-  let table = {}
+  let table : Map[String, TomlValue] = Map([])
   self.skip_newlines() // TOML 1.1: allow newlines in inline tables
   if self.view() is [RightBrace, .. rest] {
     self.update_view(rest)
@@ -158,7 +158,7 @@ fn Parser::parse_inline_table(self : Parser) -> TomlValue raise {
     // Parse value
     let value = self.parse_value()
     set_dotted_key_value(table, key_path, value) catch {
-      error => self.error(error.to_string())
+      error => self.error(Show::to_string(error))
     }
     self.skip_newlines()
     match self.view() {
@@ -300,7 +300,7 @@ let header_defined_marker : String = "\u0000__header__"
 pub fn parse(input : String) -> TomlValue raise {
   let tokens = @tokenize.tokenize(input)
   let parser = Parser::Parser(tokens)
-  let main_table = {}
+  let main_table : Map[String, TomlValue] = Map([])
   for current_table = main_table {
     parser.skip_newlines()
     match parser.view() {
@@ -327,7 +327,7 @@ pub fn parse(input : String) -> TomlValue raise {
         }
         // Create or append to the array of tables structure
         let current_table = create_array_of_tables(main_table, table_path) catch {
-          error => parser.error(error.to_string())
+          error => parser.error(Show::to_string(error))
         }
         continue current_table
       }
@@ -346,7 +346,7 @@ pub fn parse(input : String) -> TomlValue raise {
 
         // Create or get the nested table structure
         let current_table = create_nested_table(main_table, table_path) catch {
-          error => parser.error(error.to_string())
+          error => parser.error(Show::to_string(error))
         }
         // Check if this table was already explicitly defined
         if current_table.contains(table_defined_marker) {
@@ -368,7 +368,7 @@ pub fn parse(input : String) -> TomlValue raise {
           value,
           mark_implicit=in_defined_section,
         ) catch {
-          error => parser.error(error.to_string())
+          error => parser.error(Show::to_string(error))
         }
         // Validate that key-value pair is properly terminated
         match parser.view() {

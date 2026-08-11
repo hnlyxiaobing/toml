@@ -650,17 +650,16 @@ fn @lexer.Lexer::read_binary_number(self : @lexer.Lexer) -> Int64 raise {
 /// Check if the current input matches a datetime pattern without consuming characters
 fn @lexer.Lexer::is_datetime_pattern(self : @lexer.Lexer) -> Bool {
   // Check for datetime patterns using regex
-  lexmatch self.view() with longest {
-    (
-      "[0-9]{2}:[0-9]{2}"
-      "(:[0-9]{2})?(\.[0-9]+)?",
-      // LocalTime pattern: HH:MM[:SS[.fff]] followed by valid terminator
-      rest
-    ) => check_datetime_terminator_string(rest)
-    // LocalDate pattern: YYYY-MM-DD (always valid, may continue with T for datetime)
-    ("[0-9]{4}-[0-9]{2}-[0-9]{2}", _) => true
-    _ => false
+  if self.view() =~ (
+    re"^[0-9]{2}:[0-9]{2}(:[0-9]{2})?(\.[0-9]+)?",
+    after=rest,
+  ) {
+    return check_datetime_terminator_string(rest)
   }
+  if self.view() =~ (re"^[0-9]{4}-[0-9]{2}-[0-9]{2}", after=_) {
+    return true
+  }
+  false
 }
 
 ///|
@@ -683,69 +682,70 @@ fn @lexer.Lexer::read_datetime_with_loc(
   // - LocalTime: HH:MM:SS (starts with 2 digits, has colons)
   // - Date-based: YYYY-MM-DD (starts with 4 digits)
   //   - Check what follows T to determine: LocalDate, LocalDateTime, or OffsetDateTime
-  lexmatch self.view() with longest {
-    // LocalTime: HH:MM[:SS[.fff]] - must check first (2-digit start vs 4-digit)
-    (("[0-9]{2}:[0-9]{2}" "(:[0-9]{2})?(\.[0-9]+)?") as time, rest) => {
-      self.update_view(rest)
-      let time_str = time.to_owned()
-      validate_time(time_str)
-      let end_pos = self.get_loc()
-      DateTimeToken(LocalTime(time_str), loc=make_loc(start_pos, end_pos))
-    }
-    // Date-based patterns: lex YYYY-MM-DD first, then check continuation
-    ("[0-9]{4}-[0-9]{2}-[0-9]{2}" as date, rest) => {
-      self.update_view(rest)
-      let date_str = date.to_owned()
-      validate_date(date_str)
-      // Check for time component: T/t/space followed by HH:MM[:SS[.fff]]
-      if self.view() =~ (
-          (re"^" + re"[Tt ][0-9]{2}:[0-9]{2}" + re"(:[0-9]{2})?(\.[0-9]+)?") as time_with_t,
-          after=rest2,
-        ) {
-        self.update_view(rest2)
-        let time_part = time_with_t.to_owned()
-        // Validate time portion (skip the T/t/space separator)
-        validate_time(time_part[1:].to_owned())
-        let datetime_str = "\{date_str}\{time_part}"
-        // Check for timezone: Z or ±HH:MM
-        if self.view() =~ (re"^" + re"[Zz]", after=rest3) {
-          self.update_view(rest3)
-          let end_pos = self.get_loc()
-          DateTimeToken(
-            OffsetDateTime("\{datetime_str}Z"),
-            loc=make_loc(start_pos, end_pos),
-          )
-        } else if self.view() =~ (
-            (re"^" + re"[+\-][0-9]{2}:[0-9]{2}") as offset,
-            after=rest3,
-          ) {
-          self.update_view(rest3)
-          let offset_str = offset.to_owned()
-          validate_timezone_offset(offset_str)
-          let end_pos = self.get_loc()
-          DateTimeToken(
-            OffsetDateTime("\{datetime_str}\{offset_str}"),
-            loc=make_loc(start_pos, end_pos),
-          )
-        } else {
-          // No timezone - LocalDateTime
-          let end_pos = self.get_loc()
-          DateTimeToken(
-            LocalDateTime(datetime_str),
-            loc=make_loc(start_pos, end_pos),
-          )
-        }
-      } else {
-        // Just date, no time component - LocalDate
+  // LocalTime: HH:MM[:SS[.fff]] - must check first (2-digit start vs 4-digit)
+  if self.view() =~ (
+    (re"^[0-9]{2}:[0-9]{2}(:[0-9]{2})?(\.[0-9]+)?") as time,
+    after=rest,
+  ) {
+    self.update_view(rest)
+    let time_str = time.to_owned()
+    validate_time(time_str)
+    let end_pos = self.get_loc()
+    DateTimeToken(LocalTime(time_str), loc=make_loc(start_pos, end_pos))
+  } else if self.view() =~ (
+    (re"^[0-9]{4}-[0-9]{2}-[0-9]{2}") as date,
+    after=rest,
+  ) {
+    self.update_view(rest)
+    let date_str = date.to_owned()
+    validate_date(date_str)
+    // Check for time component: T/t/space followed by HH:MM[:SS[.fff]]
+    if self.view() =~ (
+        (re"^" + re"[Tt ][0-9]{2}:[0-9]{2}" + re"(:[0-9]{2})?(\.[0-9]+)?") as time_with_t,
+        after=rest2,
+      ) {
+      self.update_view(rest2)
+      let time_part = time_with_t.to_owned()
+      // Validate time portion (skip the T/t/space separator)
+      validate_time(time_part[1:].to_owned())
+      let datetime_str = "\{date_str}\{time_part}"
+      // Check for timezone: Z or ±HH:MM
+      if self.view() =~ (re"^" + re"[Zz]", after=rest3) {
+        self.update_view(rest3)
         let end_pos = self.get_loc()
-        DateTimeToken(LocalDate(date_str), loc=make_loc(start_pos, end_pos))
+        DateTimeToken(
+          OffsetDateTime("\{datetime_str}Z"),
+          loc=make_loc(start_pos, end_pos),
+        )
+      } else if self.view() =~ (
+          (re"^" + re"[+\-][0-9]{2}:[0-9]{2}") as offset,
+          after=rest3,
+        ) {
+        self.update_view(rest3)
+        let offset_str = offset.to_owned()
+        validate_timezone_offset(offset_str)
+        let end_pos = self.get_loc()
+        DateTimeToken(
+          OffsetDateTime("\{datetime_str}\{offset_str}"),
+          loc=make_loc(start_pos, end_pos),
+        )
+      } else {
+        // No timezone - LocalDateTime
+        let end_pos = self.get_loc()
+        DateTimeToken(
+          LocalDateTime(datetime_str),
+          loc=make_loc(start_pos, end_pos),
+        )
       }
-    }
-    _ => {
-      // This shouldn't happen if is_datetime_pattern was called first
+    } else {
+      // Just date, no time component - LocalDate
       let end_pos = self.get_loc()
-      DateTimeToken(LocalDate(""), loc=make_loc(start_pos, end_pos))
+      DateTimeToken(LocalDate(date_str), loc=make_loc(start_pos, end_pos))
     }
+  } else {
+    // This shouldn't happen if is_datetime_pattern was called first
+    let end_pos = self.get_loc()
+    DateTimeToken(LocalDate(""), loc=make_loc(start_pos, end_pos))
   }
 }
 
