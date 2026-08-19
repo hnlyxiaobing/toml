@@ -1,11 +1,11 @@
 name = "hnlyxiaobing/toml"
 
-version = "0.4.6"
+version = "0.4.7"
 
 import {
   "bobzhang/lexer@0.2.0",
   "moonbitlang/quickcheck@0.14.0",
-  "moonbitlang/x@0.4.49",
+  "moonbitlang/x@0.5.1",
 }
 
 readme = "README.mbt.md"
