@@ -3,7 +3,7 @@ name = "hnlyxiaobing/toml"
 version = "0.4.7"
 
 import {
-  "bobzhang/lexer@0.2.0",
+  "bobzhang/lexer@0.2.1",
   "moonbitlang/quickcheck@0.14.0",
   "moonbitlang/x@0.5.1",
 }

@@ -51,7 +51,7 @@ pub extend Token with @moonbitlang/core/debug.Debug::{to_repr}
 ///|
 /// Check if two locations are adjacent (end of first equals start of second).
 pub fn Loc::adjacent(self : Loc, other : Loc) -> Bool {
-  self.end.equal(other.start)
+  self.end == other.start
 }
 
 ///|
