@@ -20,6 +20,8 @@ pub(all) enum TomlDateTime {
 ///|
 /// Extend TomlDateTime with Eq and Debug methods
 pub extend TomlDateTime with Eq::{not_equal, equal}
+
+///|
 pub extend TomlDateTime with @moonbitlang/core/debug.Debug::{to_repr}
 
 ///|

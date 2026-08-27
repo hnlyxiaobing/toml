@@ -14,6 +14,8 @@ pub(all) struct Loc {
 ///|
 /// Extend Loc with Eq and Debug methods
 pub extend Loc with Eq::{not_equal, equal}
+
+///|
 pub extend Loc with @moonbitlang/core/debug.Debug::{to_repr}
 
 ///|
@@ -46,6 +48,8 @@ pub(all) enum Token {
 ///|
 /// Extend Token with Eq and Debug methods
 pub extend Token with Eq::{not_equal, equal}
+
+///|
 pub extend Token with @moonbitlang/core/debug.Debug::{to_repr}
 
 ///|
